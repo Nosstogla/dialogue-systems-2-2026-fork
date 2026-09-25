@@ -105,7 +105,15 @@ const nlgMapping: NLGMapping = [
       content: { predicate: "booking_room", argument: "J440" },
     },
     "The lecture is in J440.",
-],
+  ],
+
+  [
+    {
+      type: "icm",
+      content: "sem_neg",
+    },
+    "I'm sorry, I don't understand.",
+  ],
 ];
 
 export function nlg(moves: Move[]): string {
