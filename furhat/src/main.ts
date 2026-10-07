@@ -23,6 +23,16 @@ async function fhSay(text: string) {
     body: "",
   });
 }
+async function fhSound(url: string) {
+  const myHeaders = new Headers();
+  myHeaders.append("accept", "application/json");
+  const encUrl = encodeURIComponent(url);
+  return fetch(`http://${FURHATURI}/furhat/say?url=${encUrl}&blocking=false`, {
+    method: "POST",
+    headers: myHeaders,
+    body: "",
+  });
+}
 
 async function fhAttend(user: string) {
   const myHeaders = new Headers();
@@ -51,7 +61,7 @@ async function fhLED(red: number, green: number, blue: number) {
 async function newGesture() {
   const myHeaders = new Headers();
   myHeaders.append("accept", "application/json");
-  return fetch(`http://${FURHATURI}/furhat/gesture?blocking=false`, {
+  return fetch(`http://${FURHATURI}/furhat/gesture?blocking=true`, {
     method: "POST",
     headers: myHeaders,
     body: JSON.stringify({
@@ -138,6 +148,13 @@ const dmMachine = setup({
     fhCreateFlirtyWink: fromPromise<any, null>(async () => {
       return newGesture();
     }),
+
+    fhSoundWink: fromPromise<any, null>(async () => {
+      return Promise.all([
+        fhSound("https://raw.githubusercontent.com/Nosstogla/dialogue-systems-2-2026-fork/lab-3/furhat/sound/cartoon_wink_magic_sparkle.wav"),
+        newGesture()
+      ]);
+    }),
  
   },
 }).createMachine({
@@ -181,7 +198,7 @@ const dmMachine = setup({
         src: "fhCreateFlirtyWink",
         input: null,
         onDone: {
-          target: "Listen",
+          target: "FlirtyWinkAndSound",
           actions: ({ event }) => console.log(event.output),
         },
         onError: {
@@ -190,6 +207,20 @@ const dmMachine = setup({
         },
       },
     },
+    FlirtyWinkAndSound: {
+        invoke: {
+        src: "fhSoundWink",
+        input: null,
+        onDone: {
+          target: "Listen",
+          actions: ({ event }) => console.log(event.output),
+        },
+        onError: {
+          target: "Fail",
+          actions: ({ event }) => console.error(event),
+        },
+      },
+      },
     Listen: {
       invoke: {
         src: "fhL",      
