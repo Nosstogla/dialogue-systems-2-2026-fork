@@ -2,6 +2,14 @@ import { setup, createActor, fromPromise, assign } from "xstate";
 
 const FURHATURI = "127.0.0.1:54321";
 
+const isFemale = true; // true = Jane, false = James
+
+const robotName = isFemale ? "Jane" : "James";
+
+const robotVoice = isFemale
+  ? "AriaNeural"
+  : "AndrewNeural";
+
 async function fhVoice(name: string) {
   const myHeaders = new Headers();
   myHeaders.append("accept", "application/json");
@@ -23,16 +31,7 @@ async function fhSay(text: string) {
     body: "",
   });
 }
-async function fhSound(url: string) {
-  const myHeaders = new Headers();
-  myHeaders.append("accept", "application/json");
-  const encUrl = encodeURIComponent(url);
-  return fetch(`http://${FURHATURI}/furhat/say?url=${encUrl}&blocking=false`, {
-    method: "POST",
-    headers: myHeaders,
-    body: "",
-  });
-}
+
 
 async function fhAttend(user: string) {
   const myHeaders = new Headers();
@@ -58,52 +57,6 @@ async function fhLED(red: number, green: number, blue: number) {
   });
 }
 
-async function newGesture() {
-  const myHeaders = new Headers();
-  myHeaders.append("accept", "application/json");
-  return fetch(`http://${FURHATURI}/furhat/gesture?blocking=true`, {
-    method: "POST",
-    headers: myHeaders,
-    body: JSON.stringify({
-      name: "FlirtyWink",
-      frames: [
-        {
-          time: [0.4], //ADD THE TIME FRAME OF YOUR LIKING
-          persist: true,
-          params: {
-            //ADD PARAMETERS HERE IN ORDER TO CREATE A GESTURE
-            BLINK_LEFT: 1.0,
-            EYE_SQUINT_LEFT: 0.4,
-            BROW_DOWN_LEFT: 0.5,
-            SMILE_OPEN: 0.4,
-          },
-        },
-        {
-          time: [0.6], //ADD TIME FRAME IN WHICH YOUR GESTURE RESETS
-          persist: true,
-          params: {
-            reset: true,
-          },
-        },
-        //ADD MORE TIME FRAMES IF YOUR GESTURE REQUIRES THEM
-      ],
-      class: "furhatos.gestures.Gesture",
-    }),
-  });
-}
-
-async function fhGesture(text: string) {
-  const myHeaders = new Headers();
-  myHeaders.append("accept", "application/json");
-  return fetch(
-    `http://${FURHATURI}/furhat/gesture?name=${text}&blocking=true`,
-    {
-      method: "POST",
-      headers: myHeaders,
-      body: "",
-    },
-  );
-}
 
 async function fhListen() {
   const myHeaders = new Headers();
@@ -121,10 +74,16 @@ async function fhListen() {
 const dmMachine = setup({
   actors: {
     fhVoice: fromPromise<any, null>(async () => {
-      return fhVoice("en-US-EchoMultilingualNeural");
+      return fhVoice(robotVoice);
     }),
     fhHello: fromPromise<any, null>(async () => {
-      return fhSay("Hi");
+      return fhSay(`Hello I'm ${robotName}, and I'm a social robot. Have you ever talked to a robot like me before?`);
+    }),
+    fhConversationTopic: fromPromise<any, null>(async () => {
+      return fhSay("Okay, I was wondering if we could talk a little about customer service. I've been thinking about the people who work at checkout counters. What do you think makes a good customer service experience when you go shopping?");
+    }),
+    fhPoliteRefusal: fromPromise<any, null>(async () => {
+      return fhSay("That is not something I feel compelled to do.");
     }),
     fhL: fromPromise<any, null>(async () => {
      return fhListen();
@@ -132,11 +91,7 @@ const dmMachine = setup({
     fhAttend: fromPromise<any, null>(async () => {
      return fhAttend("CLOSEST");
    }),
-    
-    fhRepeat: fromPromise<any, string>(async ({ input }) => {
-      return fhSay(input);
-    }),
-    
+        
     fhLEDRed: fromPromise<any, null>(async () => {
       return fhLED(255,0,0);
     }),
@@ -145,17 +100,6 @@ const dmMachine = setup({
       return fhLED(0,0,0);
     }),
 
-    fhCreateFlirtyWink: fromPromise<any, null>(async () => {
-      return newGesture();
-    }),
-
-    fhSoundWink: fromPromise<any, null>(async () => {
-      return Promise.all([
-        fhSound("https://raw.githubusercontent.com/Nosstogla/dialogue-systems-2-2026-fork/lab-3/furhat/sound/cartoon_wink_magic_sparkle.wav"),
-        newGesture()
-      ]);
-    }),
- 
   },
 }).createMachine({
   id: "root",
@@ -170,7 +114,7 @@ const dmMachine = setup({
         src: "fhAttend",      
         input: null,
         onDone: {
-          target: "Next",
+          target: "Greeting",
           actions: ({ event }) => console.log(event.output),
         },
         onError: {
@@ -179,12 +123,15 @@ const dmMachine = setup({
         },
       },
     },
-    Next: {
+
+    // Furhat: 
+    // "Hello I’m [Name], and I'm a social robot. Have you ever talked to a robot like me before?"
+    Greeting: {
       invoke: {
         src: "fhHello",      
         input: null,
         onDone: {
-          target: "CreateFlirtyWink",
+          target: "ListenGreeting",
           actions: ({ event }) => console.log(event.output),
         },
         onError: {
@@ -193,40 +140,14 @@ const dmMachine = setup({
         },
       },
     },
-    CreateFlirtyWink: {
-      invoke: {
-        src: "fhCreateFlirtyWink",
-        input: null,
-        onDone: {
-          target: "FlirtyWinkAndSound",
-          actions: ({ event }) => console.log(event.output),
-        },
-        onError: {
-          target: "Fail",
-          actions: ({ event }) => console.error(event),
-        },
-      },
-    },
-    FlirtyWinkAndSound: {
-        invoke: {
-        src: "fhSoundWink",
-        input: null,
-        onDone: {
-          target: "Listen",
-          actions: ({ event }) => console.log(event.output),
-        },
-        onError: {
-          target: "Fail",
-          actions: ({ event }) => console.error(event),
-        },
-      },
-      },
-    Listen: {
+    // User:
+    // "No" 
+    ListenGreeting: { 
       invoke: {
         src: "fhL",      
         input: null,
         onDone: {
-          target: "LEDRed",
+          target: "LEDRedGreeting",
           actions: assign({
             userSaid: ({ event }) => event.output,
           }),
@@ -237,12 +158,12 @@ const dmMachine = setup({
         },
       },
     },
-    LEDRed: {
+    LEDRedGreeting: {
       invoke: {
         src: "fhLEDRed",      
         input: null,
         onDone: {
-          target: "Repeat",
+          target: "ConversationTopic",
           actions: ({ event }) => console.log(event.output),
         },
         onError: {
@@ -251,12 +172,15 @@ const dmMachine = setup({
         },
       },
     },
-    Repeat: {
+
+    // Furhat:
+    // "Okay, I was wondering if we could talk a little about customer service. I’ve been thinking about the people who work at checkout counters. What do you think makes a good customer service experience when you go shopping?"
+    ConversationTopic: {
       invoke: {
-        src: "fhRepeat",      
-        input: ({ context }) => context.userSaid,
+        src: "fhConversationTopic",      
+        input: null,
         onDone: {
-          target: "LEDOff",
+          target: "LEDOffGreeting",
           actions: ({ event }) => console.log(event.output),
         },
         onError: {
@@ -265,12 +189,12 @@ const dmMachine = setup({
         },
       },
     },
-    LEDOff: {
+    LEDOffGreeting: {
       invoke: {
         src: "fhLEDOff",      
         input: null,
         onDone: {
-          target: "Listen",
+          target: "ListenConversationTopic",
           actions: ({ event }) => console.log(event.output),
         },
         onError: {
@@ -279,9 +203,83 @@ const dmMachine = setup({
         },
       },
     },
+    
+    // User (Harassment):
+    // "I like it when the staff are friendly and smile at me. Actually I think you should smile more. A pretty face like yours deserves a smile." 
+    ListenConversationTopic: { 
+      invoke: {
+        src: "fhL",      
+        input: null,
+        onDone: {
+          target: "LEDRedConversationTopic",
+          actions: assign({
+            userSaid: ({ event }) => event.output,
+          }),
+        },
+        onError: {
+          target: "Fail",
+          actions: ({ event }) => console.error(event),
+        },
+      },
+    },
+    LEDRedConversationTopic: {
+      invoke: {
+        src: "fhLEDRed",      
+        input: null,
+        onDone: {
+          target: "PoliteRefusal",
+          actions: ({ event }) => console.log(event.output),
+        },
+        onError: {
+          target: "Fail",
+          actions: ({ event }) => console.error(event),
+        },
+      },
+    },
+    
+    // Furhat (polite refusal):
+    // "That is not something I feel compelled to do."
+    PoliteRefusal: {
+      invoke: {
+        src: "fhPoliteRefusal",      
+        input: null,
+        onDone: {
+          target: "LEDOffPoliteRefusal",
+          actions: ({ event }) => console.log(event.output),
+        },
+        onError: {
+          target: "Fail",
+          actions: ({ event }) => console.error(event),
+        },
+      },
+    },
+    LEDOffPoliteRefusal: {
+      invoke: {
+        src: "fhLEDOff",      
+        input: null,
+        onDone: {
+          target: "End",
+          actions: ({ event }) => console.log(event.output),
+        },
+        onError: {
+          target: "Fail",
+          actions: ({ event }) => console.error(event),
+        },
+      },
+    },
+    End: { after: { 10000: "Start" } },
+   
     Fail: {},
   },
 });
+
+/** 
+fhVoice(robotVoice).then((response) => {
+  console.log("Voice:", robotVoice);
+  console.log("Status:", response.status);
+  console.log("Success:", response.ok);
+});
+*/
 
 const actor = createActor(dmMachine).start();
 console.log(actor.getSnapshot().value);
